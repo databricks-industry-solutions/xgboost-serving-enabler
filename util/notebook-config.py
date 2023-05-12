@@ -1,22 +1,12 @@
 # Databricks notebook source
-# DBTITLE 1,Kafka config - see the RUNME notebook for instructions on setting up secrets
-kafka_bootstrap_servers = dbutils.secrets.get("solution-accelerator-cicd", "iot-anomaly-kafka-bootstrap-server")
-security_protocol = "SASL_SSL"
-sasl_mechanism = "PLAIN"
-sasl_username = dbutils.secrets.get("solution-accelerator-cicd", "iot-anomaly-sasl-username")
-sasl_password = dbutils.secrets.get("solution-accelerator-cicd", "iot-anomaly-sasl-password")
-topic = "iot_msg_topic"
-sasl_config = f'org.apache.kafka.common.security.plain.PlainLoginModule required username="{sasl_username}" password="{sasl_password}";'
-
-# COMMAND ----------
-
-# DBTITLE 1,Streaming checkpoint location
-checkpoint_path = "/dbfs/tmp/iot-anomaly-detection/checkpoints"
+# DBTITLE 1,Paths
+root_path = '/tmp/airbnb'
+source_file = 's3://db-gtm-industry-solutions/data/rcg/airbnb/listings.csv'
 
 # COMMAND ----------
 
 # DBTITLE 1,Database settings
-database = "rvp_iot_sa"
+database = "xgboost_serving"
 
 spark.sql(f"create database if not exists {database}")
 
@@ -24,10 +14,29 @@ spark.sql(f"create database if not exists {database}")
 
 # DBTITLE 1,mlflow settings
 import mlflow
-model_name = "iot_anomaly_detection_xgboost"
+model_name = "sfo_airbnb_price"
+model_name_lgb = "sfo_airbnb_price__lgb"
 username = dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()
-mlflow.set_experiment('/Users/{}/iot_anomaly_detection'.format(username))
+mlflow.set_experiment('/Users/{}/xgboost_serving'.format(username))
 
 # COMMAND ----------
 
+# DBTITLE 1,Set Host and Personal Access Token
+import os
+databricks_host = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiUrl().getOrElse(None) 
+os.environ['DATABRICKS_URL'] = databricks_host
+os.environ['DATABRICKS_TOKEN'] = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
 
+# COMMAND ----------
+
+config = {}
+config['root_path'] = root_path
+config['database'] = database
+config['model_name'] = model_name
+config['model_name_lgb'] = model_name_lgb
+config['source_file'] = source_file
+config['databricks_host'] = databricks_host
+
+# COMMAND ----------
+
+print("Defined: ", config)
