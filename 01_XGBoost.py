@@ -49,7 +49,7 @@ from sklearn.metrics import mean_squared_error
 
 # MAGIC %md ##Step 1: Access the Data
 # MAGIC
-# MAGIC To demonstrate this technique, we will make use of an Airbnb dataset providing details about various properties for short-term lease in the San Francisco area and their lease price.  This dataset has been made available for [download](https://www.kaggle.com/datasets/jeploretizo/san-francisco-airbnb-listings?resource=download) from the Kaggle website.  For this demonstration, we provide the data in a publicly accessible cloud storage:
+# MAGIC To demonstrate this technique, we will make use of an Airbnb dataset providing details about various properties for short-term lease in the San Francisco area and their lease price.  This dataset has been made available for [download](https://www.kaggle.com/datasets/jeploretizo/san-francisco-airbnb-listings?resource=download) from the Kaggle website.  For this notebook, we provide the data at a publicly accessible cloud storage path `config['source_file']`:
 
 # COMMAND ----------
 
@@ -136,10 +136,11 @@ print(f"Numerical:   {numerical_cols}")
 # COMMAND ----------
 
 # DBTITLE 1,Add NULL Indicator Fields for All Numerical Fields
+raw_df_w_na = raw_df
 for c in numerical_cols:
-    raw_df = raw_df.withColumn(f"{c}_na", fn.expr(f"CASE WHEN {c} IS NULL THEN 1 ELSE 0 END"))
+    raw_df_w_na = raw_df_w_na.withColumn(f"{c}_na", fn.expr(f"CASE WHEN {c} IS NULL THEN 1 ELSE 0 END"))
 
-display(raw_df)
+display(raw_df_w_na)
 
 # COMMAND ----------
 
@@ -149,7 +150,7 @@ display(raw_df)
 
 # DBTITLE 1,Split the Data into Training and Testing Sets
 # split the data
-(train_df, test_df) = raw_df.randomSplit([.8, .2], seed=42)
+(train_df, test_df) = raw_df_w_na.randomSplit([.8, .2], seed=42)
 
 # print count of records in each set
 print(f"Training instances: {train_df.cache().count()}")
@@ -476,24 +477,24 @@ class modelWrapper(mlflow.pyfunc.PythonModel):
     # copy input df ahead of modification 
     _df = df.copy(deep=True)
 
-    # for numerical fields in dataframe
-    #for c in _df.select_dtypes(include=['int32','int64','float64']):
-    for c in ['host_total_listings_count',
-              'latitude',
-              'longitude',
-              'accommodates',
-              'bathrooms',
-              'bedrooms',
-              'beds',
-              'minimum_nights',
-              'number_of_reviews',
-              'review_scores_rating',
-              'review_scores_accuracy',
-              'review_scores_cleanliness',
-              'review_scores_checkin',
-              'review_scores_communication',
-              'review_scores_location',
-              'review_scores_value']:
+    # for numerical fields in dataframe 
+    for c in _df.select_dtypes(include=['int16', 'int32', 'int64', 'float16', 'float32', 'float64']):
+    # for c in ['host_total_listings_count',
+    #           'latitude',
+    #           'longitude',
+    #           'accommodates',
+    #           'bathrooms',
+    #           'bedrooms',
+    #           'beds',
+    #           'minimum_nights',
+    #           'number_of_reviews',
+    #           'review_scores_rating',
+    #           'review_scores_accuracy',
+    #           'review_scores_cleanliness',
+    #           'review_scores_checkin',
+    #           'review_scores_communication',
+    #           'review_scores_location',
+    #           'review_scores_value']:
       # add an indicator field to dataframe
       _df[f"{c}_na"] =  np.where(_df[c] is np.nan, 1, 0)
     
@@ -530,6 +531,13 @@ print(
 
 # COMMAND ----------
 
+# DBTITLE 1,Infer model signature
+from mlflow.models.signature import infer_signature
+
+signature = infer_signature(raw_df.toPandas().drop(['price'],axis=1), yhat)
+
+# COMMAND ----------
+
 # MAGIC %md And now we can log our model to mlflow:
 
 # COMMAND ----------
@@ -541,7 +549,8 @@ with mlflow.start_run() as run:
         artifact_path='model',
         python_model=wrapped_model,
         conda_env=conda_env,
-        registered_model_name=model_name
+        registered_model_name=model_name,
+        signature=signature
     )
 
 # COMMAND ----------

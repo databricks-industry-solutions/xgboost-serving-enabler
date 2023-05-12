@@ -546,6 +546,7 @@ print(
 
 # DBTITLE 1,Infer model signature
 from mlflow.models.signature import infer_signature
+
 signature = infer_signature(test_pd.drop(['price'],axis=1), yhat)
 
 # COMMAND ----------
