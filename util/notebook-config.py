@@ -23,8 +23,7 @@ mlflow.set_experiment('/Users/{}/xgboost_serving'.format(username))
 
 # DBTITLE 1,Set Host and Personal Access Token
 import os
-databricks_host = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiUrl().getOrElse(None) 
-os.environ['DATABRICKS_URL'] = databricks_host
+os.environ['DATABRICKS_URL'] = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiUrl().getOrElse(None) 
 os.environ['DATABRICKS_TOKEN'] = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
 
 # COMMAND ----------
@@ -35,7 +34,7 @@ config['database'] = database
 config['model_name'] = model_name
 config['model_name_lgb'] = model_name_lgb
 config['source_file'] = source_file
-config['databricks_host'] = databricks_host
+config['serving_endpoint_name'] = serving_endpoint_name = 'sfo_airbnb_price'
 
 # COMMAND ----------
 

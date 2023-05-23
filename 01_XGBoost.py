@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %md The purpose of this notebook is to demonstrate how to train an XGBoost model in a distributed manner using Spark and then deploy it for lightweight model serving.  
+# MAGIC %md The purpose of this notebook is to demonstrate how to train an XGBoost model in a distributed manner using Spark and then deploy it for lightweight model serving.  This notebook is available at https://github.com/databricks-industry-solutions/xgboost-serving-enabler.
 
 # COMMAND ----------
 
@@ -22,6 +22,12 @@ import pyspark.sql.functions as fn
 from pyspark.sql.types import *
 
 import mlflow
+import os
+import requests
+import numpy as np
+import pandas as pd
+import json
+import time
 
 # for spark model
 from xgboost.spark import SparkXGBRegressor
@@ -478,23 +484,7 @@ class modelWrapper(mlflow.pyfunc.PythonModel):
     _df = df.copy(deep=True)
 
     # for numerical fields in dataframe 
-    for c in _df.select_dtypes(include=['int16', 'int32', 'int64', 'float16', 'float32', 'float64']):
-    # for c in ['host_total_listings_count',
-    #           'latitude',
-    #           'longitude',
-    #           'accommodates',
-    #           'bathrooms',
-    #           'bedrooms',
-    #           'beds',
-    #           'minimum_nights',
-    #           'number_of_reviews',
-    #           'review_scores_rating',
-    #           'review_scores_accuracy',
-    #           'review_scores_cleanliness',
-    #           'review_scores_checkin',
-    #           'review_scores_communication',
-    #           'review_scores_location',
-    #           'review_scores_value']:
+    for c in numerical_cols:
       # add an indicator field to dataframe
       _df[f"{c}_na"] =  np.where(_df[c] is np.nan, 1, 0)
     
@@ -531,13 +521,6 @@ print(
 
 # COMMAND ----------
 
-# DBTITLE 1,Infer model signature
-from mlflow.models.signature import infer_signature
-
-signature = infer_signature(raw_df.toPandas().drop(['price'],axis=1), yhat)
-
-# COMMAND ----------
-
 # MAGIC %md And now we can log our model to mlflow:
 
 # COMMAND ----------
@@ -549,8 +532,7 @@ with mlflow.start_run() as run:
         artifact_path='model',
         python_model=wrapped_model,
         conda_env=conda_env,
-        registered_model_name=model_name,
-        signature=signature
+        registered_model_name=model_name
     )
 
 # COMMAND ----------
@@ -615,46 +597,36 @@ loaded_model.predict(sample_pd)
 # MAGIC
 # MAGIC <img src='https://brysmiwasb.blob.core.windows.net/demos/images/xgb_create_endpoint.PNG' width=80%>
 # MAGIC
-# MAGIC Click the *Create serving endpoint* button to deploy the endpoint and monitor the deployment process until the *Serving Endpoint State* is *Ready*.  Once it is in this state, copy the endpoint's URL from the page and paste it into the cell below:
+# MAGIC Click the *Create serving endpoint* button to deploy the endpoint and monitor the deployment process until the *Serving Endpoint State* is *Ready*.  
+# MAGIC
+# MAGIC ----
+# MAGIC **API-based Guide**
+# MAGIC
+# MAGIC We provide code to create or update model serving endpoints according to the configuration below:
 
 # COMMAND ----------
 
-# DBTITLE 1,Define function to create endpoint according to our specification
-def create_endpoint(databricks_host, model_name, model_version):
-  """Create endpoint and wait until the endpoint is ready"""
-  url = f'{databricks_host}/api/2.0/serving-endpoints'
-  headers = {'Authorization': f'Bearer {os.environ.get("DATABRICKS_TOKEN")}', 
-'Content-Type': 'application/json'}
-  ds_dict = {
-    "name": model_name,
-    "config": {
-     "served_models": [{
-       "model_name": model_name,
+# MAGIC %run ./util/create-update-serving-endpoint
+
+# COMMAND ----------
+
+# DBTITLE 1,Use the defined function to create or update the endpoint
+served_models = [
+    {
+      "name": "XGBoost",
+      "model_name": model_name,
        "model_version": model_version,
        "workload_size": "Small",
-       "scale_to_zero_enabled": True,
-     }]
-   }
-  }
-  data_json = json.dumps(ds_dict)
-  
-  # deploy endpoint
-  response = requests.request(method='POST', headers=headers, url=url, data=data_json)
-  if response.status_code != 200: 
-    if response.json()["error_code"] != "RESOURCE_ALREADY_EXISTS": # if error is RESOURCE_ALREADY_EXISTS, pass
-      raise Exception(f'Request failed with status {response.status_code}, {response.text}')
+       "scale_to_zero_enabled": True
+    }
+]
+traffic_config = {"routes": [{"served_model_name": "XGBoost", "traffic_percentage": "100"}]}
 
-  # wait until deployment is ready
-  response = requests.request(method='GET', headers=headers, url=f"{url}/{model_name}")
-  while response.json()["state"]["ready"] != "READY":
-    print("Waiting 30s for deployment to finish")
-    time.sleep(30)
-    response = requests.request(method='GET', headers=headers, url=f"{url}/{model_name}")
-    if response.status_code != 200:
-      raise Exception(f'Request failed with status {response.status_code}, {response.text}')
-  return response.json()
-
-create_endpoint(databricks_host, model_name, model_version)
+# kick off endpoint creation/update
+if not endpoint_exists(config['serving_endpoint_name']):
+  create_endpoint(config['serving_endpoint_name'], served_models)
+else:
+  update_endpoint(config['serving_endpoint_name'], served_models)
 
 # COMMAND ----------
 
@@ -663,13 +635,7 @@ create_endpoint(databricks_host, model_name, model_version)
 # COMMAND ----------
 
 # DBTITLE 1,Define Functions to Query the Endpoint
-import os
-import requests
-import numpy as np
-import pandas as pd
-import json
-
-endpoint_url = f"""{databricks_host}/serving-endpoints/{model_name}/invocations"""
+endpoint_url = f"""{os.environ['DATABRICKS_URL']}/serving-endpoints/{model_name}/invocations"""
 
 def create_tf_serving_json(data):
   return {'inputs': {name: data[name].tolist() for name in data.keys()} if isinstance(data, dict) else data.tolist()}
@@ -684,10 +650,6 @@ def score_model(dataset):
     raise Exception(f'Request failed with status {response.status_code}, {response.text}')
 
   return response.json()
-
-# COMMAND ----------
-
-# MAGIC %md Before we can query the endpoint, we need to capture a personal access token and assign it to an environmental variable referenced in the test code.  A personal access token can be acquired through [the following steps](https://docs.databricks.com/dev-tools/api/latest/authentication.html):
 
 # COMMAND ----------
 

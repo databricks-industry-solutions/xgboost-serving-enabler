@@ -3,27 +3,24 @@
 [![CLOUD](https://img.shields.io/badge/CLOUD-ALL-blue?logo=googlecloud&style=for-the-badge)](https://cloud.google.com/databricks)
 [![POC](https://img.shields.io/badge/POC-10_days-green?style=for-the-badge)](https://databricks.com/try-databricks)
 
-## Business Problem
-<List of the business use case the solution accelerator address>
+In the world of Big Data, we are often managing large data sets that cannot fit into the memory of a single server. This becomes a barrier to the training of many Machine Learning models that require all the data on which they are to be trained to be loaded into a single pandas dataframe or numpy array.
 
-## Scope
-<How we expect the user to use this content>
+To overcome this limitation, many popular models, such as those in the XGBoost family of models, have implemented capabilities allowing them to process data in Spark dataframes.  Spark dataframes overcome the memory limitations of a single server by allowing large datasets to be distributed over the combined resources of the multiple servers that comprise a Spark cluster. When models implement support for Spark dataframes, all or portions of the work they perform against the data can be distributed in a similar manner.
+
+While this capability overcomes a key challenge to successfully training a model on a large dataset, it creates a dependency in the fitted model on the availability of a Spark cluster at the time of model deployment.  While in batch inference scenarios where the model is used as part of a Spark workflow, this dependency is no big deal.  But in real-time inference scenarios where individual records are typically sent to a model (often hosted behind a REST API) for scoring, this dependency can create overhead on the model host that slows response rates.
+
+To overcome this challenge, we may wish to train a model in a distributed manner and then transfer the information learned during training to a non-distributed version of the model.  Such an approach allows us to eliminate the dependency on Spark during inference but does require us to carefully transfer learned information from one model to another.  In this accelerator, we'll demonstrate how this might be done for XGBoost and lightGBM models.
 
 ___
-<john.doe@databricks.com>
-
-___
-
-
-IMAGE TO REFERENCE ARCHITECTURE
+<bryan.smith@databricks.com> <sean.owen@databricks.com>
 
 ___
 
-&copy; 2022 Databricks, Inc. All rights reserved. The source in this notebook is provided subject to the Databricks License [https://databricks.com/db-license-source].  All included or referenced third party libraries are subject to the licenses set forth below.
+&copy; 2023 Databricks, Inc. All rights reserved. The source in this notebook is provided subject to the Databricks License [https://databricks.com/db-license-source].  All included or referenced third party libraries are subject to the licenses set forth below.
 
 | library                                | description             | license    | source                                              |
 |----------------------------------------|-------------------------|------------|-----------------------------------------------------|
-| PyYAML                                 | Reading Yaml files      | MIT        | https://github.com/yaml/pyyaml                      |
+| SynapseML  | Open-source library that simplifies the creation of massively scalable machine learning (ML) pipelines |  MIT | https://github.com/Microsoft/SynapseML  |
 
 ## Getting started
 
